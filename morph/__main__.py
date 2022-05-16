@@ -2,18 +2,28 @@ import numpy as np
 import cv2
 import dlib
 import argparse
-from morphing import visualize
+from morphing import visualize, morph
+from utils import perpendicular_vector, resize
 
 parser = argparse.ArgumentParser(description='Morph one face into another.')
-parser.add_argument("image", type=str, help='The input image to find landmarks')
+parser.add_argument("image0", type=str, help='The first image')
+parser.add_argument("image1", type=str, help='The second image')
 
 args = parser.parse_args()
 
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
 
-image = cv2.imread(args.image, 1)
-visualize(image, detector, predictor)
+imsize = (200, 200)
+
+I0 = resize(cv2.imread(args.image0, 1), imsize)
+I1 = resize(cv2.imread(args.image1, 1), imsize)
+# cv2.imwrite('img\\out\\temp0.png', I0)
+# cv2.imwrite('img\\out\\temp1.png', I1)
+visualize(I0, detector, predictor, fname='img\\out\\temp0.png')
+visualize(I1, detector, predictor, fname='img\\out\\temp1.png')
+morphed = morph(I0, I1, detector, predictor)
+cv2.imwrite('img\\out\\trumpbama.png', morphed)
 quit()
 
 # cap = cv2.VideoCapture(1)

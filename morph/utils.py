@@ -7,3 +7,11 @@ def shape2np(shape):
     for i in range(0, 68):
         shape_np[i] = (shape.part(i).x, shape.part(i).y)
     return shape_np
+
+
+def resize(I, size):
+    return cv2.resize(I, size, interpolation=cv2.INTER_AREA)
+
+
+def perpendicular_vector(v):
+    return v[::-1] * np.array([1, -1])
