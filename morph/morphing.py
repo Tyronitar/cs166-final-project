@@ -21,7 +21,7 @@ landmark_dict = {
 def display_landmarks_and_lines(image, landmarks, lines, fname='img\\out\\temp.png'):
     img = image.copy()
 
-    thickness = img.shape[1] // 250
+    thickness = max(1, img.shape[1] // 250)
     for start, end in lines:
         cv2.line(img, start, end, (255, 0, 0), thickness)
     for x, y in landmarks:
@@ -48,18 +48,17 @@ def get_landmark_lines():
     return np.array(lines)
 
 
-def get_feature_lines(image, detector, predictor):
+def detect_features(image, detector, predictor):
     landmarks = detect_landmarks(image, detector, predictor)
     line_ids = get_landmark_lines()
     
     # Define lines PQ
-    P = []
-    Q = []
-    for start, end in line_ids:
-        P.append(landmarks[start])
-        Q.append(landmarks[end])
+    PQ = np.zeros((len(line_ids), 2, 2), dtype=int)
+    for i, (start, end) in enumerate(line_ids):
+        PQ[i, 0, :] = landmarks[start]
+        PQ[i, 1, :] = landmarks[end]
 
-    return np.array(P), np.array(Q)
+    return landmarks, PQ
 
 
 def visualize(image, detector, predictor):
@@ -68,7 +67,9 @@ def visualize(image, detector, predictor):
     lines = []
     for start, end in line_ids:
         lines.append([landmarks[start], landmarks[end]])
+    
+    landmarks, PQ = detect_features(image, detector, predictor)
 
-    display_landmarks_and_lines(image, landmarks, lines)
+    display_landmarks_and_lines(image, landmarks, PQ)
 
 
