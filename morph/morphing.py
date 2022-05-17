@@ -6,16 +6,16 @@ import dlib
 from utils import shape2np, perpendicular_vector
 
 landmark_dict = {
-    # "left_eye": np.arange(36, 42),
-    # "left_eyebrow": np.arange(17, 22),
-    # "right_eye": np.arange(42, 48),
-    # "right_eyebrow": np.arange(22, 27),
-    # "nose": np.arange(31, 36),
-    # "nose_bridge": np.arange(27, 31),
-    # "lips_inner": np.arange(60, 68),
-    # "lips_outer": np.arange(48, 60),
-    # "face": np.arange(0, 17),
-    "test": np.array([27, 28])  # Single line for testing algorithm
+    "left_eye": np.arange(36, 42),
+    "left_eyebrow": np.arange(17, 22),
+    "right_eye": np.arange(42, 48),
+    "right_eyebrow": np.arange(22, 27),
+    "nose": np.arange(31, 36),
+    "nose_bridge": np.arange(27, 31),
+    "lips_inner": np.arange(60, 68),
+    "lips_outer": np.arange(48, 60),
+    "face": np.arange(0, 17),
+    # "test": np.array([27, 28])  # Single line for testing algorithm
 }
 
 # Description of parameters
@@ -29,12 +29,12 @@ with distance. If it is large, then every pixel will be affected only by the lin
 nearest it. Ifb is zero, then each pixel will be affected by all lines equally. Values
 of b in the range [0.5, 2] are the most useful. """
 
-"""The value ofp is typically in the range [0, 1]; if it is zero, then all lines have
+"""The value of p is typically in the range [0, 1]; if it is zero, then all lines have
 the same weight. if it is one, then longer lines have a greater relative weight than
 shorter lines."""
 PARAMETERS = {
-    'a': 1e-3,
-    'b': 1.0,
+    'a': 1,
+    'b': 2.0,
     'p': 0.5
 }
 
@@ -94,43 +94,63 @@ def visualize(image, detector, predictor, fname='img\\out\\temp.png'):
     display_landmarks_and_lines(image, landmarks, PQ, fname=fname)
 
 
-def morph(I0, I1, detector, predictor):
+def morph(I0, I1, detector, predictor, p=0.5, a=1.0, b=1.0):
+    # Get featue lines for both faces
     _, PQ = detect_features(I1, detector, predictor)
     _, PQ_ = detect_features(I0, detector, predictor)
+    P, Q = PQ[:, 0], PQ[:, 1]
+    P_, Q_ = PQ_[:, 0], PQ_[:, 1]
 
-    dst = np.zeros(I0.shape)
-    print(I0.shape)
+    # Output "destination" image
+    dst = np.zeros((I0.shape[0] * I0.shape[1], I0.shape[2]))
 
-    for x in range(dst.shape[0]):
-        print(f"{x / dst.shape[0] * 100:.2f}%\r", end="")
-        for y in range(dst.shape[1]):
-            DSUM = np.zeros(2)
-            weightsum = 0
-            X = np.array([x, y])
-            for i in range(len(PQ)):
-                P, Q = PQ[i]
-                P_, Q_ = PQ_[i]
-                pq_norm = np.linalg.norm(Q - P)
-                pq_norm_ = np.linalg.norm(Q_ - P_)
-                u = (X - P).dot((Q - P)) / (pq_norm ** 2)
-                v = (X - P).dot(perpendicular_vector(Q - P)) / pq_norm
+    # All pixel coordinates
+    x, y = np.meshgrid(np.arange(I0.shape[0]), np.arange(I0.shape[1]))
+    X = np.dstack([x, y])
 
-                X_i = P_ + u * (Q_ - P_) + v * perpendicular_vector(Q_ - P_) / pq_norm_
+    # Directed vectors, their norms, and perpendicular vectors
+    pq_vec = Q - P
+    pq_vec_ = Q_ - P_
+    pq_norm = np.sqrt(np.sum(pq_vec * pq_vec, axis=1))
+    pq_norm_ = np.sqrt(np.sum(pq_vec_ * pq_vec_, axis=1))
+    pq_perp = perpendicular_vector(pq_vec)
+    pq_perp_ = perpendicular_vector(pq_vec_)
 
-                Di = X_i - X
-                dist = np.linalg.norm(X - P) if u < 0 else np.linalg.norm(X - Q) if u > 1\
-                    else abs(v)
-                # dist = np.linalg.norm(np.cross(Q - P, P - X)) / pq_norm
+    # Change X's shape to allow it to operate with lists of vectors
+    X = X.reshape(-1, 1, 2)
 
-                weight = ((pq_norm ** PARAMETERS['p']) / (PARAMETERS['a'] + dist)) ** PARAMETERS['b']
-                DSUM += Di * weight
-                weightsum += weight
-            X_ = X + DSUM / weightsum
-            # print(X_)
-            # print(X_.astype(int))
-            for j in range(I0.shape[2]):
-                dst[x, y, j] = map_coordinates(I0[..., j], [[X_[0]], [X_[1]]], mode='nearest')
-            # dst[x, y] = I0[X_[0] % I0.shape[0], X_[1] % I0.shape[1]]
+    # Compute u, v using PQ
+    u = np.sum((X - P) * pq_vec, axis=-1) / (pq_norm ** 2)
+    v = np.sum((X - P) * pq_perp, axis=-1) / pq_norm
+
+    # Compute X' from u, v, and PQ'
+    X_ = P_[np.newaxis, ...] +\
+         u[..., np.newaxis] * pq_vec_[np.newaxis, ...] +\
+         v[..., np.newaxis] * pq_perp_[np.newaxis, ...] / pq_norm_.reshape(1, -1, 1)
+
+    # Compute Displacement 
+    D = X_ - X
+
+    # Compute distance from the line using trick from the paper based on value of u
+    # u \ in [0, 1] => abs(v), u < 0 => distance from P, u > 1 => distance from Q
+    use_P_dist = u < 0
+    p_dist = np.sqrt(np.sum((X - P) * (X - P), axis=-1))
+    use_Q_dist = u > 1
+    q_dist = np.sqrt(np.sum((X - Q) * (X - Q), axis=-1))
+    use_v = np.logical_and(0 <= u, u <= 1)
+    dist = use_P_dist * p_dist + use_Q_dist * q_dist + use_v * np.abs(v)
+
+    # Compute weight of each displacement
+    weight = ((pq_norm ** p) / (a + dist)) ** b
+
+    # Position to use in source image is weighted sum of displacements added to position
+    DSUM = np.sum(D * weight[..., np.newaxis], axis=1)
+    weightsum = np.sum(weight, axis=1)
+    X_ = X.squeeze() + DSUM / weightsum[..., np.newaxis]
+
+    # Get the morphed image using the positions in X_
+    for j in range(I0.shape[2]):
+        dst[..., j] = map_coordinates(I0[..., j], X_[:, ::-1].T, mode='nearest')
+    dst = dst.reshape(I0.shape)
     
     return dst
-                

@@ -14,4 +14,4 @@ def resize(I, size):
 
 
 def perpendicular_vector(v):
-    return v[::-1] * np.array([1, -1])
+    return v[:, ::-1] * np.array([1, -1])

@@ -8,22 +8,22 @@ from utils import perpendicular_vector, resize
 parser = argparse.ArgumentParser(description='Morph one face into another.')
 parser.add_argument("image0", type=str, help='The first image')
 parser.add_argument("image1", type=str, help='The second image')
+parser.add_argument("--output_name", "-o", type=str, help='Output file destination',
+                    default="img\\out\\temp.png")
 
 args = parser.parse_args()
 
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
 
-imsize = (200, 200)
+imsize = (500, 500)
 
 I0 = resize(cv2.imread(args.image0, 1), imsize)
 I1 = resize(cv2.imread(args.image1, 1), imsize)
-# cv2.imwrite('img\\out\\temp0.png', I0)
-# cv2.imwrite('img\\out\\temp1.png', I1)
 visualize(I0, detector, predictor, fname='img\\out\\temp0.png')
 visualize(I1, detector, predictor, fname='img\\out\\temp1.png')
 morphed = morph(I0, I1, detector, predictor)
-cv2.imwrite('img\\out\\trumpbama.png', morphed)
+cv2.imwrite(args.output_name, morphed)
 quit()
 
 # cap = cv2.VideoCapture(1)
