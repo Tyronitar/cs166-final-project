@@ -3,7 +3,9 @@ import numpy as np
 from scipy.ndimage import map_coordinates
 import cv2
 import dlib
-from utils import shape2np, perpendicular_vector
+from utils import shape2np, perpendicular_vector, bgr2rgb
+import imageio
+import tqdm
 
 landmark_dict = {
     "left_eye": np.arange(36, 42),
@@ -94,10 +96,8 @@ def visualize(image, detector, predictor, fname='img\\out\\temp.png'):
     display_landmarks_and_lines(image, landmarks, PQ, fname=fname)
 
 
-def morph(I0, I1, detector, predictor, p=0.5, a=1.0, b=1.0):
+def morph(I0, PQ_, PQ, p=0.5, a=1.0, b=1.0):
     # Get featue lines for both faces
-    _, PQ = detect_features(I1, detector, predictor)
-    _, PQ_ = detect_features(I0, detector, predictor)
     P, Q = PQ[:, 0], PQ[:, 1]
     P_, Q_ = PQ_[:, 0], PQ_[:, 1]
 
@@ -154,3 +154,23 @@ def morph(I0, I1, detector, predictor, p=0.5, a=1.0, b=1.0):
     dst = dst.reshape(I0.shape)
     
     return dst
+
+
+def metamorphosis(I0, I1, fname='img\\out\\temp.gif', duration=5.0, framerate=24):
+    detector = dlib.get_frontal_face_detector()
+    predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
+
+    _, PQ0 = detect_features(I0, detector, predictor)
+    _, PQ1 = detect_features(I1, detector, predictor)
+
+    frames = int(duration * framerate)
+    with imageio.get_writer(fname, mode='I', duration=1/framerate) as writer:
+        pbar = tqdm.tqdm(np.linspace(0, 1, frames)[::-1])
+        pbar.set_description('Generating morph sequence')
+        for p in pbar:
+            PQ_inter = p * PQ0 + (1 - p) * PQ1
+            I0_inter = morph(I0, PQ0, PQ_inter)
+            I1_inter = morph(I1, PQ1, PQ_inter)
+            I_inter = bgr2rgb(p * I0_inter + (1 - p) * I1_inter)
+            
+            writer.append_data(I_inter.astype(np.uint8))
