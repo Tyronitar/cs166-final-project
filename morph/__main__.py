@@ -1,7 +1,7 @@
-import numpy as np
-import cv2
-import dlib
 import argparse
+
+import cv2
+
 from morphing import metamorphosis
 from utils import resize
 
@@ -22,6 +22,13 @@ args = parser.parse_args()
 
 imsize = (args.size, args.size)
 
-I0 = resize(cv2.imread(args.image0, 1), imsize)
-I1 = resize(cv2.imread(args.image1, 1), imsize)
+I0 = cv2.imread(args.image0, 1)
+if I0 is None:
+    raise IOError(f'Problem opening "{args.image0}". Make sure the file exists.')
+I0 = resize(I0, imsize)
+
+I1 = cv2.imread(args.image1, 1)
+if I1 is None:
+    raise IOError(f'Problem opening "{args.image1}". Make sure the file exists.')
+I1 = resize(I1, imsize)
 metamorphosis(I0, I1, fname=args.output_name, duration=args.duration, framerate=args.framerate)

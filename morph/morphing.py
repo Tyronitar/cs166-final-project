@@ -1,11 +1,11 @@
-from tkinter import W
-import numpy as np
-from scipy.ndimage import map_coordinates
 import cv2
 import dlib
-from utils import shape2np, perpendicular_vector, bgr2rgb
 import imageio
+import numpy as np
+from scipy.ndimage import map_coordinates
 import tqdm
+
+from utils import shape2np, perpendicular_vector, bgr2rgb
 
 landmark_dict = {
     "left_eye": np.arange(36, 42),
@@ -17,27 +17,6 @@ landmark_dict = {
     "lips_inner": np.arange(60, 68),
     "lips_outer": np.arange(48, 60),
     "face": np.arange(0, 17),
-    # "test": np.array([27, 28])  # Single line for testing algorithm
-}
-
-# Description of parameters
-"""If a is barely greater than zero, then if the distance from the line to the pixel
-is zero, the strength is nearly infinite. With this value for a, the user knows that
-pixels on the line will go exactly where he wants them. Values larger than that will
-yield a more smooth warping, but with less precise control."""
-
-"""The variable b determines how the relative strength of different lines Falls off
-with distance. If it is large, then every pixel will be affected only by the line
-nearest it. Ifb is zero, then each pixel will be affected by all lines equally. Values
-of b in the range [0.5, 2] are the most useful. """
-
-"""The value of p is typically in the range [0, 1]; if it is zero, then all lines have
-the same weight. if it is one, then longer lines have a greater relative weight than
-shorter lines."""
-PARAMETERS = {
-    'a': 1,
-    'b': 2.0,
-    'p': 0.5
 }
 
 
@@ -53,25 +32,65 @@ def display_landmarks_and_lines(image, landmarks, lines, fname='img\\out\\temp.p
     cv2.imwrite(fname, img)
 
 
-def detect_landmarks(image, detector, predictor):
+def detect_landmarks(
+    image: np.ndarray,
+    detector,
+    predictor: dlib.shape_predictor) -> np.ndarray:
+    """Find the landmarks in a face.
+
+    Args:
+        image (np.ndarray): Image to find landmarks in
+        detector (_type_): Detector to find faces.
+        predictor (dlib.shape_predictor): Shape predictor to find landmarks.
+
+    Returns:
+        np.ndarray: List of landmarks in [x, y] format.
+
+    Raises:
+        ValueError: If no faces are found in input image.
+    """
+    # Convert image to grayscale for detection
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-    bbox = detector(gray)[0]
+    faces = detector(gray)
+    if len(faces) < 1:
+        raise ValueError("Image does not contain faces.")
+    bbox = faces[0]
 
+    # Find landmarks in first face
     shape = predictor(gray, bbox)
     landmarks = shape2np(shape)
 
     return landmarks
 
 
-def get_landmark_lines():
+def get_landmark_lines() -> np.ndarray:
+    """Get landmark indices corresponding to feature lines.
+
+    Returns:
+        np.ndarray: List of feature line endpoints as landmark indices.
+    """
     lines = []
     for pts in landmark_dict.values():
         lines.extend(np.stack([pts[:-1], pts[1:]]).T)
     return np.array(lines)
 
 
-def detect_features(image, detector, predictor):
+def detect_features(
+    image: np.ndarray,
+    detector,
+    predictor: dlib.shape_predictor) -> tuple[np.ndarray, np.ndarray]:
+    """Find landmarks and feature lines in an image.
+
+    Args:
+        image (np.ndarray): Image to find landmarks in
+        detector (_type_): Detector to find faces.
+        predictor (dlib.shape_predictor): Shape predictor to find landmarks.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Array of the landmarks, and the endpoints of the
+            feature lines in form [[x_start, y_start], [x_end, y_end]].
+    """
     landmarks = detect_landmarks(image, detector, predictor)
     line_ids = get_landmark_lines()
     
@@ -96,16 +115,50 @@ def visualize(image, detector, predictor, fname='img\\out\\temp.png'):
     display_landmarks_and_lines(image, landmarks, PQ, fname=fname)
 
 
-def morph(I0, PQ_, PQ, p=0.5, a=1.0, b=1.0):
+def morph(
+    I: np.ndarray,
+    PQ_: np.ndarray,
+    PQ: np.ndarray,
+    p: float=0.5,
+    a: float=1.0,
+    b: float=1.0) -> np.ndarray:
+    """Compute Transformed Image using method in "Feature-Based Image Metamorphosis".
+
+    The value of p is typically in the range [0, 1]; if it is zero, then all lines have
+    the same weight. if it is one, then longer lines have a greater relative weight than
+    shorter lines.
+
+    If a is barely greater than zero, then if the distance from the line to the pixel
+    is zero, the strength is nearly infinite. With this value for a, the user knows that
+    pixels on the line will go exactly where he wants them. Values larger than that will
+    yield a more smooth warping, but with less precise control.
+
+    The variable b determines how the relative strength of different lines Falls off
+    with distance. If it is large, then every pixel will be affected only by the line
+    nearest it. Ifb is zero, then each pixel will be affected by all lines equally. Values
+    of b in the range [0.5, 2] are the most useful.
+
+
+    Args:
+        I (np.ndarray): Source image. Needs three dimensions.
+        PQ_ (np.ndarray): Pixel coordinates of feature lines of source image.
+        PQ (np.ndarray): Pixel coordinates of feature lines of destination image.
+        p (float, optional): Relative weighting based on line length. Defaults to 0.5.
+        a (float, optional): Transformation strength based on distance. Defaults to 1.0.
+        b (float, optional): Relative weighting based on proximity. Defaults to 1.0.
+
+    Returns:
+        np.ndarray: The destination image. 
+    """
     # Get featue lines for both faces
     P, Q = PQ[:, 0], PQ[:, 1]
     P_, Q_ = PQ_[:, 0], PQ_[:, 1]
 
     # Output "destination" image
-    dst = np.zeros((I0.shape[0] * I0.shape[1], I0.shape[2]))
+    dst = np.zeros((I.shape[0] * I.shape[1], I.shape[2]))
 
     # All pixel coordinates
-    x, y = np.meshgrid(np.arange(I0.shape[0]), np.arange(I0.shape[1]))
+    x, y = np.meshgrid(np.arange(I.shape[0]), np.arange(I.shape[1]))
     X = np.dstack([x, y])
 
     # Directed vectors, their norms, and perpendicular vectors
@@ -149,14 +202,27 @@ def morph(I0, PQ_, PQ, p=0.5, a=1.0, b=1.0):
     X_ = X.squeeze() + DSUM / weightsum[..., np.newaxis]
 
     # Get the morphed image using the positions in X_
-    for j in range(I0.shape[2]):
-        dst[..., j] = map_coordinates(I0[..., j], X_[:, ::-1].T, mode='nearest')
-    dst = dst.reshape(I0.shape)
+    for j in range(I.shape[2]):
+        dst[..., j] = map_coordinates(I[..., j], X_[:, ::-1].T, mode='nearest')
+    dst = dst.reshape(I.shape)
     
     return dst
 
 
-def metamorphosis(I0, I1, fname='img\\out\\temp.gif', duration=5.0, framerate=24):
+def metamorphosis(I0: np.ndarray,
+    I1: np.ndarray,
+    fname: str='img\\out\\temp.gif',
+    duration: float=5.0,
+    framerate: int=24):
+    """Generate metamorphosis sequence from I0 to I1.
+
+    Args:
+        I0 (np.ndarray): First image
+        I1 (np.ndarray): Second image 
+        fname (str, optional): Path to save the gif to. Defaults to 'img\\out\\temp.gif'.
+        duration (float, optional): Duration of the gif in seconds. Defaults to 5.0.
+        framerate (int, optional): Framerate of the gif (FPS). Defaults to 24.
+    """
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
 
@@ -168,9 +234,12 @@ def metamorphosis(I0, I1, fname='img\\out\\temp.gif', duration=5.0, framerate=24
         pbar = tqdm.tqdm(np.linspace(0, 1, frames)[::-1])
         pbar.set_description('Generating morph sequence')
         for p in pbar:
+            # Interpolate feature lines and morph both images to intermediate image
             PQ_inter = p * PQ0 + (1 - p) * PQ1
             I0_inter = morph(I0, PQ0, PQ_inter)
             I1_inter = morph(I1, PQ1, PQ_inter)
+
+            # Intermediate image is weighted avergae of both morphed images
             I_inter = bgr2rgb(p * I0_inter + (1 - p) * I1_inter)
             
             writer.append_data(I_inter.astype(np.uint8))
