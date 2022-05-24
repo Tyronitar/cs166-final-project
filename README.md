@@ -15,6 +15,10 @@ Run the `morph` module with your two images to morph them. The code will output 
 
 The program will not work if a human face cannot be detected in both images. As a result, using too small images, or using images without people can create issues. If you would like to use faces that are not detectable, you can also provide manual annotations of the landmarks via a .pts file (See [lion_landmarks.pts](lion_landmarks.pts) for an example). The format of the file is 68 lines of the (x, y) coordinates of each landmark in the dlib order. The order and positions of facial landmarks is shown below for your convenicnce.
 
+<p align="center">
+  <img src="img/landmarks.png"/>
+</p>
+
 To manually annotate images, I recommend using [FLAT - Facial Landmarks Annotation Tool](https://github.com/luigivieira/Facial-Landmarks-Annotation-Tool). Below is an example morph using a non-human face.
 <p align="center">
   <img src="examples/obama-lion.gif" />
