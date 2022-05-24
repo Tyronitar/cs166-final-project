@@ -103,6 +103,56 @@ def detect_features(
     return landmarks, PQ
 
 
+def load_landmarks(path: str, size: tuple[int, int], old_size: tuple[int, int]) -> np.ndarray:
+    """Load the landmakrs for an image stored in a .pts file.
+
+    The format of the file is in each line, two integers separated by a space, indicating
+    the x, y position of the landmark in the image. There should be 68 such lines, where
+    the landmarks follow the specification used in dlib.
+
+    Args:
+        path (str): Path to load the landmarks from.
+        size (tuple[int, int]): The current size of the image (H x W)
+        old_size (tuple[int, int]): The original size of the image (H x W)
+
+    Returns:
+        np.ndarray: _description_
+    """
+    items = np.zeros((68, 2))
+    with open(path, 'r') as f:
+        for i, line in enumerate(f):
+            if 1 < i < 70:
+                parts = line.strip().split()
+                items[i - 2, 0] = size[0] / old_size[1] * int(parts[0])
+                items[i - 2, 1] = size[1] / old_size[0] * int(parts[1])
+    
+    return items
+
+
+def load_features(path: str, size: tuple[int, int], old_size: tuple[int, int]) -> tuple[np.ndarray, np.ndarray]:
+    """Load landmarks and features for an image.
+
+    Args:
+        path (str): Path to load the landmarks from.
+        size (tuple[int, int]): The current size of the image (H x W)
+        old_size (tuple[int, int]): The original size of the image (H x W)
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: Array of the landmarks, and the endpoints of the
+            feature lines in form [[x_start, y_start], [x_end, y_end]].
+    """
+    landmarks = load_landmarks(path, size, old_size)
+    line_ids = get_landmark_lines()
+    
+    # Define lines PQ
+    PQ = np.zeros((len(line_ids), 2, 2), dtype=int)
+    for i, (start, end) in enumerate(line_ids):
+        PQ[i, 0, :] = landmarks[start]
+        PQ[i, 1, :] = landmarks[end]
+
+    return landmarks, PQ
+
+
 def visualize(image, detector, predictor, fname='img\\out\\temp.png'):
     landmarks = detect_landmarks(image, detector, predictor)
     line_ids = get_landmark_lines()
@@ -211,23 +261,44 @@ def morph(
 
 def metamorphosis(I0: np.ndarray,
     I1: np.ndarray,
+    size0: tuple[int, int],
+    size1: tuple[int, int],
     fname: str='img\\out\\temp.gif',
     duration: float=5.0,
-    framerate: int=24):
+    framerate: int=24,
+    load0: str = '',
+    load1: str = ''):
     """Generate metamorphosis sequence from I0 to I1.
 
     Args:
         I0 (np.ndarray): First image
         I1 (np.ndarray): Second image 
+        size0 (tuple of ints): The original H/W of I0 (before resizing)
+        size1 (tuple of ints): The original H/W of I1 (before resizing)
         fname (str, optional): Path to save the gif to. Defaults to 'img\\out\\temp.gif'.
         duration (float, optional): Duration of the gif in seconds. Defaults to 5.0.
         framerate (int, optional): Framerate of the gif (FPS). Defaults to 24.
+        load0 (str, optional): The path to load landmarks from. If empty, detects instead.
+        load1 (str, optional): The path to load landmarks from. If empty, detects instead.
     """
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
+    size = I0.shape[:2]
 
-    _, PQ0 = detect_features(I0, detector, predictor)
-    _, PQ1 = detect_features(I1, detector, predictor)
+    if load0 != '':
+        print("Loading features for I0...")
+        _, PQ0 = load_features(load0, size, size0)
+    else:
+        print("Detecting features for I0...")
+        _, PQ0 = detect_features(I0, detector, predictor)
+    print('...done!')
+    if load1 != '':
+        print("Loading features for I1...")
+        _, PQ1 = load_features(load1, size, size1)
+    else:
+        print("Detecting features for I1...")
+        _, PQ1 = detect_features(I1, detector, predictor)
+    print('...done!')
 
     frames = int(duration * framerate)
     with imageio.get_writer(fname, mode='I', duration=1/framerate) as writer:
@@ -239,7 +310,7 @@ def metamorphosis(I0: np.ndarray,
             I0_inter = morph(I0, PQ0, PQ_inter)
             I1_inter = morph(I1, PQ1, PQ_inter)
 
-            # Intermediate image is weighted avergae of both morphed images
+            # Intermediate image is weighted average of both morphed images
             I_inter = bgr2rgb(p * I0_inter + (1 - p) * I1_inter)
             
             writer.append_data(I_inter.astype(np.uint8))
