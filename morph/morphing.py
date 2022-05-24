@@ -108,7 +108,7 @@ def load_landmarks(path: str, size: tuple[int, int], old_size: tuple[int, int]) 
 
     The format of the file is in each line, two integers separated by a space, indicating
     the x, y position of the landmark in the image. There should be 68 such lines, where
-    the landmarks follow the specification used in dlib.
+    the landmark order follows the specification used by dlib.
 
     Args:
         path (str): Path to load the landmarks from.
@@ -116,16 +116,19 @@ def load_landmarks(path: str, size: tuple[int, int], old_size: tuple[int, int]) 
         old_size (tuple[int, int]): The original size of the image (H x W)
 
     Returns:
-        np.ndarray: _description_
+        np.ndarray: List of landmarks in [x, y] format.
     """
-    items = np.zeros((68, 2))
+    items = []
     with open(path, 'r') as f:
         for i, line in enumerate(f):
-            if 1 < i < 70:
-                parts = line.strip().split()
-                items[i - 2, 0] = size[0] / old_size[1] * int(parts[0])
-                items[i - 2, 1] = size[1] / old_size[0] * int(parts[1])
+            parts = line.strip().split()
+            items.append(np.zeros(2))
+            items[i][0] = size[0] / old_size[1] * int(parts[0])
+            items[i][1] = size[1] / old_size[0] * int(parts[1])
     
+    items = np.array(items)
+    if len(items) != 68:
+        raise ValueError(f'Expected 68 landmark points in "{path}". Found {len(items)}')
     return items
 
 
