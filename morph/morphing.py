@@ -156,15 +156,15 @@ def load_features(path: str, size: tuple[int, int], old_size: tuple[int, int]) -
     return landmarks, PQ
 
 
-def visualize(image, detector, predictor, fname='img\\out\\temp.png'):
-    landmarks = detect_landmarks(image, detector, predictor)
-    line_ids = get_landmark_lines()
-    lines = []
-    for start, end in line_ids:
-        lines.append([landmarks[start], landmarks[end]])
+def visualize(image, fname='img\\out\\temp.png', do_landmarks=True, do_lines=True):
+    detector = dlib.get_frontal_face_detector()
+    predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
     
     landmarks, PQ = detect_features(image, detector, predictor)
-
+    if not do_landmarks:
+        landmarks = []
+    if not do_lines:
+        PQ = []
     display_landmarks_and_lines(image, landmarks, PQ, fname=fname)
 
 
@@ -269,8 +269,9 @@ def metamorphosis(I0: np.ndarray,
     fname: str='img\\out\\temp.gif',
     duration: float=5.0,
     framerate: int=24,
-    load0: str = '',
-    load1: str = ''):
+    load0: str='',
+    load1: str='',
+    intermediates: bool=False):
     """Generate metamorphosis sequence from I0 to I1.
 
     Args:
@@ -282,7 +283,11 @@ def metamorphosis(I0: np.ndarray,
         duration (float, optional): Duration of the gif in seconds. Defaults to 5.0.
         framerate (int, optional): Framerate of the gif (FPS). Defaults to 24.
         load0 (str, optional): The path to load landmarks from. If empty, detects instead.
+            Defaults to ''.
         load1 (str, optional): The path to load landmarks from. If empty, detects instead.
+            Defaults to ''.
+        intrmediates (bool, optional): Whether to save intermediate photos as well.
+            Defaults to False.
     """
     detector = dlib.get_frontal_face_detector()
     predictor = dlib.shape_predictor('models/shape_predictor_68_face_landmarks.dat')
@@ -315,5 +320,9 @@ def metamorphosis(I0: np.ndarray,
 
             # Intermediate image is weighted average of both morphed images
             I_inter = bgr2rgb(p * I0_inter + (1 - p) * I1_inter)
+            if intermediates:
+                imageio.imwrite(f"{fname[:-4]}-{p:.2f}.png", I_inter)
+                imageio.imwrite(f"{fname[:-4]}-i0-{p:.2f}.png", bgr2rgb(I0_inter))
+                imageio.imwrite(f"{fname[:-4]}-i1-{p:.2f}.png", bgr2rgb(I1_inter))
             
             writer.append_data(I_inter.astype(np.uint8))

@@ -12,16 +12,5 @@ imageio = "*"
 tqdm = "*"
 opencv-python = "*"
 
-[dev-packages]
-pytest = "7"
-black = "*"
-flake8 = "*"
-pytest-xdist = "*"
-pylint = "*"
-isort = "*"
-
-[requires]
-python_version = "3.10"
-
 [pipenv]
 allow_prereleases = true
